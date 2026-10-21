@@ -24,7 +24,7 @@ use uv_configuration::IndexStrategy;
 use uv_configuration::KeyringProviderType;
 use uv_distribution_filename::{DistFilename, WheelFilename};
 use uv_distribution_types::{
-    BuiltDist, DirectUrlBuiltDist, FileLocation, IndexCapabilities, IndexEntryFilename,
+    BuiltDist, DirectUrlBuiltDist, File, FileLocation, IndexCapabilities, IndexEntryFilename,
     IndexFormat, IndexLocations, IndexMetadataRef, IndexStatusCodeDecision,
     IndexStatusCodeStrategy, IndexUrl, Name, RegistryBuiltWheel, VariantsJsonContent, VerbatimFile,
 };
@@ -35,7 +35,7 @@ use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::MarkerEnvironment;
 use uv_platform_tags::Platform;
-use uv_pypi_types::{Digest, HashDigest, HashDigests, ProjectStatus, Yanked};
+use uv_pypi_types::{Digest, HashAlgorithm, HashDigest, HashDigests, ProjectStatus, Yanked};
 use uv_pypi_types::{PypiSimpleDetail, PypiSimpleIndex, ResolutionMetadata};
 use uv_redacted::SafeUrl;
 use uv_small_str::SmallString;
@@ -70,6 +70,13 @@ impl CachedVariantWheelMetadata {
         let variant = variant.ok_or(uv_metadata::Error::MissingVariantMetadata)?;
         Ok(Self { core, variant })
     }
+}
+
+/// Index-level variant metadata and the SHA-256 digest of its exact bytes.
+#[derive(Debug)]
+pub struct FetchedVariantsJson {
+    pub contents: Vec<u8>,
+    pub hash: HashDigest,
 }
 
 /// A builder for an [`RegistryClient`].
@@ -969,9 +976,9 @@ impl RegistryClient {
     pub async fn fetch_variants_json(
         &self,
         package_name: &PackageName,
-        file: &VerbatimFile,
+        file: &File,
         index: &IndexUrl,
-    ) -> Result<Vec<u8>, Error> {
+    ) -> Result<FetchedVariantsJson, Error> {
         let url = file.location.to_url().map_err(ErrorKind::InvalidUrl)?;
 
         if url.scheme() == "file" {
@@ -980,7 +987,7 @@ impl RegistryClient {
                 .map_err(|()| ErrorKind::NonFileUrl(url.clone()))?;
             let bytes = fs_err::tokio::read(path).await.map_err(ErrorKind::Io)?;
             verify_metadata_hashes(&url, &bytes, &file.hashes)?;
-            return Ok(bytes);
+            return Ok(fetched_variants_json(bytes));
         }
 
         let cache_key = format!(
@@ -1037,10 +1044,11 @@ impl RegistryClient {
             .map_err(|err| {
                 ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
             })?;
-        Ok(self
+        let bytes = self
             .cached_client()
             .get_serde_with_retry(request, &cache_entry, cache_control, response_callback)
-            .await?)
+            .await?;
+        Ok(fetched_variants_json(bytes))
     }
 
     /// Fetch the metadata for a remote wheel file.
@@ -1555,6 +1563,15 @@ fn verify_metadata_hashes(url: &SafeUrl, bytes: &[u8], hashes: &HashDigests) -> 
         }
     }
     Ok(())
+}
+
+fn fetched_variants_json(contents: Vec<u8>) -> FetchedVariantsJson {
+    let mut hasher = Hasher::from(HashAlgorithm::Sha256);
+    hasher.update(&contents);
+    FetchedVariantsJson {
+        contents,
+        hash: HashDigest::from(hasher),
+    }
 }
 
 type FlatIndexEntriesByPackage = FxHashMap<PackageName, Vec<FlatIndexEntry>>;

@@ -4,13 +4,13 @@ pub use uv_resolver_types::MetadataResponse;
 pub(crate) use uv_resolver_types::MetadataUnavailable;
 use uv_resolver_types::VariantsJsonMetadataError;
 
-use uv_client::MetadataFormat;
+use uv_client::{FetchedVariantsJson, MetadataFormat};
 use uv_configuration::BuildOptions;
 use uv_distribution::{DistributionDatabase, Reporter};
 use uv_distribution_types::{
-    BuiltDist, Dist, IndexCapabilities, IndexLocations, IndexMetadata, IndexMetadataRef, IndexUrl,
-    InstalledDist, MinimumLibcVersion, RequestedDist, RequiresPython, SelectedVariant,
-    SupportedVariantProperties, VariantPolicy, VariantsJsonContent, VerbatimFile,
+    BuiltDist, Dist, File, IndexCapabilities, IndexLocations, IndexMetadata, IndexMetadataRef,
+    IndexUrl, InstalledDist, MinimumLibcVersion, RequestedDist, RequiresPython, SelectedVariant,
+    SupportedVariantProperties, VariantPolicy, VariantsJsonContent,
 };
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
@@ -33,7 +33,7 @@ pub type WheelMetadataResult = Result<MetadataResponse, uv_distribution::Error>;
 #[derive(Debug)]
 pub enum VariantsJsonResponse {
     /// The variant metadata was fetched successfully.
-    Found(Vec<u8>),
+    Found(FetchedVariantsJson),
     /// The package version cannot be used.
     Unavailable(MetadataUnavailable),
 }
@@ -79,7 +79,7 @@ pub trait ResolverProvider {
     fn fetch_variants_json<'io>(
         &'io self,
         package_name: &'io PackageName,
-        file: &'io VerbatimFile,
+        file: &'io File,
         index: &'io IndexUrl,
     ) -> impl Future<Output = Result<VariantsJsonResponse, uv_client::Error>> + 'io;
 
@@ -423,7 +423,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
     async fn fetch_variants_json<'io>(
         &'io self,
         package_name: &'io PackageName,
-        file: &'io VerbatimFile,
+        file: &'io File,
         index: &'io IndexUrl,
     ) -> Result<VariantsJsonResponse, uv_client::Error> {
         match self
