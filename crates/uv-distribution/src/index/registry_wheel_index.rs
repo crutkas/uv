@@ -17,7 +17,6 @@ use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
 use uv_types::HashStrategy;
 
-use crate::download::check_wheel_variant_compatibility;
 use crate::hash::ArtifactHashPolicy;
 use crate::index::cached_wheel::{CachedWheel, ResolvedWheel};
 use crate::source::{HTTP_REVISION, HttpRevisionPointer, LOCAL_REVISION, LocalRevisionPointer};
@@ -124,7 +123,7 @@ impl<'a> RegistryWheelIndex<'a> {
         let hash_policy = self
             .hasher
             .archive_policy_for_package(&wheel.filename.name, &wheel.filename.version);
-        self.matching(&wheel.filename.name, |entry| {
+        self.get(&wheel.filename.name).find(|entry| {
             if !entry.matches_wheel(&wheel.index, &wheel.filename, no_build, no_binary) {
                 return false;
             }
@@ -158,7 +157,6 @@ impl<'a> RegistryWheelIndex<'a> {
             };
             ArtifactHashPolicy::required(hash_policy).can_reuse(&entry.dist, index_hashes)
         })
-        .next()
         .map(IndexEntry::dist)
     }
 
@@ -177,7 +175,7 @@ impl<'a> RegistryWheelIndex<'a> {
         let required = self
             .hasher
             .archive_policy_for_package(&source.name, &source.version);
-        self.matching(&source.name, |entry| {
+        self.get(&source.name).find(|entry| {
             if !entry.matches_source(source) {
                 return false;
             }
@@ -194,7 +192,6 @@ impl<'a> RegistryWheelIndex<'a> {
             ArtifactHashPolicy::required(required)
                 .can_reuse(&entry.dist, source.file.hashes.as_slice())
         })
-        .next()
         .map(IndexEntry::dist)
     }
 
@@ -202,28 +199,7 @@ impl<'a> RegistryWheelIndex<'a> {
     ///
     /// If the package is not yet indexed, this will index the package by reading from the cache.
     pub fn get(&mut self, name: &'a PackageName) -> impl Iterator<Item = &IndexEntry<'_>> {
-        self.matching(name, |_| true)
-    }
-
-    fn matching(
-        &mut self,
-        name: &'a PackageName,
-        matches: impl Fn(&IndexEntry<'_>) -> bool,
-    ) -> impl Iterator<Item = &IndexEntry<'_>> {
-        let target = self.tags.python_platform();
-        self.get_impl(name)
-            .iter()
-            .rev()
-            // Verify the selected archive before reading its variant metadata.
-            .filter(move |entry| {
-                matches(entry)
-                    && check_wheel_variant_compatibility(
-                        &entry.dist.filename,
-                        &entry.dist.path,
-                        target,
-                    )
-                    .is_ok()
-            })
+        self.get_impl(name).iter().rev()
     }
 
     /// Get an entry in the index.
