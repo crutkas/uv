@@ -90,6 +90,48 @@ fn install_local_variant_wheel() -> Result<()> {
     Ok(())
 }
 
+/// A universal resolution treats a wheel's variant markers as empty.
+///
+/// TODO(konsti): Evaluate these markers against the selected wheel's variant values in universal
+/// resolution.
+#[cfg(feature = "test-universal")]
+#[test]
+fn compile_with_empty_variant_markers() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let requires = [
+        "missing; 'nvidia :: sm_arch :: 89_real' in variant_properties".parse()?,
+        "fallback; 'nvidia' not in variant_namespaces and sys_platform == 'linux'".parse()?,
+    ];
+    let (filename, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
+        .requires(&requires)
+        .build();
+    context.temp_dir.child(&filename).write_binary(&wheel)?;
+
+    let (fallback, wheel) = WheelBuilder::new(&"fallback".parse()?, &"1.0.0".parse()?).build();
+    context.temp_dir.child(fallback).write_binary(&wheel)?;
+
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str(&format!("./{filename}\n"))?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.in")
+        .arg("--universal")
+        .arg("--no-index")
+        .arg("--find-links").arg(".")
+        .arg("--no-header")
+        .arg("--no-annotate"), @r"
+    exit_code: 0 (success)
+    ----- stdout -----
+    fallback==1.0.0 ; sys_platform == 'linux'
+    ./ok-1.0.0-py3-none-any.whl
+
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    Ok(())
+}
+
 /// A refreshed local variant wheel must have compatible platform tags.
 #[test]
 fn refresh_incompatible_variant_wheel() -> Result<()> {

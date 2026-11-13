@@ -218,7 +218,16 @@ impl<'a> RequirementExpander<'a> {
         self.modifiers
             .apply(context.modifier_scope(), dependencies)
             .map(move |mut requirement| {
-                let marker = requirement.marker.for_dependency_extra(extra);
+                // We don't currently fork on variant markers, so resolve them before forking.
+                let marker = match context {
+                    RequirementContext::Root | RequirementContext::Group { .. } => {
+                        requirement.marker.resolve_variants_false()
+                    }
+                    RequirementContext::Package { .. } | RequirementContext::Extra { .. } => {
+                        requirement.marker.evaluate_variants()
+                    }
+                }
+                .for_dependency_extra(extra);
 
                 if requirement.marker != marker {
                     requirement.to_mut().marker = marker;
@@ -296,6 +305,7 @@ impl<'a> RequirementExpander<'a> {
                     .map(|extra| (extra.clone(), MarkerTree::TRUE));
                 let marker = constraint
                     .marker
+                    .resolve_variants_false()
                     .resolve_extras(active_extras)
                     .and(requirement.marker);
                 if marker.is_false() {

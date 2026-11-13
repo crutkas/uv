@@ -305,11 +305,14 @@ impl HashStrategy {
         mode: HashCheckingMode,
     ) -> Result<Self, HashStrategyError> {
         let mut constraint_hashes = FxHashMap::<VersionId, Vec<HashDigest>>::default();
+        let marker_env = marker_env.map(ResolverMarkerEnvironment::markers);
 
         // First, index the constraints by name.
         for (requirement, digests) in constraints {
             if !requirement
-                .evaluate_markers(marker_env.map(ResolverMarkerEnvironment::markers), &[])
+                .marker
+                .resolve_variants_false()
+                .evaluate_optional_environment(marker_env, &[])
             {
                 continue;
             }
@@ -338,8 +341,13 @@ impl HashStrategy {
         // For each requirement, map from hash identity to allowed hashes.
         let mut requirement_hashes = FxHashMap::<VersionId, Vec<HashDigest>>::default();
         for (requirement, digests) in requirements {
-            if !requirement
-                .evaluate_markers(marker_env.map(ResolverMarkerEnvironment::markers), &[])
+            let marker = match requirement {
+                UnresolvedRequirement::Named(requirement) => requirement.marker,
+                UnresolvedRequirement::Unnamed(requirement) => requirement.marker,
+            };
+            if !marker
+                .resolve_variants_false()
+                .evaluate_optional_environment(marker_env, &[])
             {
                 continue;
             }
@@ -471,6 +479,7 @@ impl HashStrategy {
         let mut hashes = None;
 
         for requirement in requirements {
+            // TODO(konsti): Skip hashes from dependencies disabled by wheel variant markers.
             let Some((id, digests)) = Self::requirement_hashes(requirement)? else {
                 continue;
             };

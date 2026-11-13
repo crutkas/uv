@@ -1,6 +1,7 @@
 use std::fmt::{Display, Formatter};
+use std::sync::Arc;
 
-use uv_normalize::{ExtraName, GroupName};
+use uv_normalize::{ExtraName, GroupName, VariantFeature, VariantNamespace, VariantValue};
 
 use crate::marker::tree::MarkerValueList;
 use crate::{MarkerValueExtra, MarkerValueString, MarkerValueVersion};
@@ -59,6 +60,8 @@ pub enum CanonicalMarkerValueString {
     PlatformVersion,
     /// `implementation_name`
     ImplementationName,
+    /// The label of the selected variant wheel.
+    VariantLabel,
 }
 
 impl CanonicalMarkerValueString {
@@ -75,6 +78,7 @@ impl CanonicalMarkerValueString {
 impl From<MarkerValueString> for CanonicalMarkerValueString {
     fn from(value: MarkerValueString) -> Self {
         match value {
+            MarkerValueString::VariantLabel => Self::VariantLabel,
             MarkerValueString::ImplementationName => Self::ImplementationName,
             MarkerValueString::OsName => Self::OsName,
             MarkerValueString::OsNameDeprecated => Self::OsName,
@@ -98,6 +102,7 @@ impl From<MarkerValueString> for CanonicalMarkerValueString {
 impl From<CanonicalMarkerValueString> for MarkerValueString {
     fn from(value: CanonicalMarkerValueString) -> Self {
         match value {
+            CanonicalMarkerValueString::VariantLabel => Self::VariantLabel,
             CanonicalMarkerValueString::ImplementationName => Self::ImplementationName,
             CanonicalMarkerValueString::OsName => Self::OsName,
             CanonicalMarkerValueString::PlatformMachine => Self::PlatformMachine,
@@ -116,6 +121,7 @@ impl Display for CanonicalMarkerValueString {
     /// Normalizes deprecated names to the proper ones
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::VariantLabel => f.write_str("variant_label"),
             Self::ImplementationName => f.write_str("implementation_name"),
             Self::OsName => f.write_str("os_name"),
             Self::PlatformMachine => f.write_str("platform_machine"),
@@ -162,13 +168,19 @@ impl Display for CanonicalMarkerValueExtra {
 
 /// A key-value pair for `<value> in <key>` or `<value> not in <key>`, where the key is a list.
 ///
-/// Used for PEP 751 markers.
+/// Used for PEP 751 lockfile markers and PEP 825 wheel variant markers.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum CanonicalMarkerListPair {
     /// A valid [`ExtraName`].
     Extras(ExtraName),
     /// A valid [`GroupName`].
     DependencyGroup(GroupName),
+    /// A namespace from the selected wheel.
+    VariantNamespace(VariantNamespace),
+    /// A namespace and feature from the selected wheel.
+    VariantFeature(Arc<(VariantNamespace, VariantFeature)>),
+    /// A namespace, feature, and value from the selected wheel.
+    VariantProperty(Arc<(VariantNamespace, VariantFeature, VariantValue)>),
     /// For leniency, preserve invalid values.
     Arbitrary { key: MarkerValueList, value: String },
 }
@@ -179,6 +191,9 @@ impl CanonicalMarkerListPair {
         match self {
             Self::Extras(_) => MarkerValueList::Extras,
             Self::DependencyGroup(_) => MarkerValueList::DependencyGroups,
+            Self::VariantNamespace(_) => MarkerValueList::VariantNamespaces,
+            Self::VariantFeature(_) => MarkerValueList::VariantFeatures,
+            Self::VariantProperty(_) => MarkerValueList::VariantProperties,
             Self::Arbitrary { key, .. } => *key,
         }
     }
@@ -188,6 +203,15 @@ impl CanonicalMarkerListPair {
         match self {
             Self::Extras(extra) => extra.to_string(),
             Self::DependencyGroup(group) => group.to_string(),
+            Self::VariantNamespace(namespace) => namespace.to_string(),
+            Self::VariantFeature(member) => {
+                let (namespace, feature) = member.as_ref();
+                format!("{namespace} :: {feature}")
+            }
+            Self::VariantProperty(member) => {
+                let (namespace, feature, value) = member.as_ref();
+                format!("{namespace} :: {feature} :: {value}")
+            }
             Self::Arbitrary { value, .. } => value.clone(),
         }
     }
