@@ -6189,6 +6189,8 @@ pub enum SatisfiesResult<'lock> {
     ),
     /// A locked dependency version violates a declared specifier.
     MismatchedDependencyVersion(&'lock PackageName, &'lock Version, VersionSpecifiers),
+    /// Two locked packages with the same name can be selected together.
+    ConflictingDependencySelections(String, String),
     /// Refreshed declarations regenerate different resolved dependency edges.
     MismatchedPackageDependencies(
         &'lock PackageName,

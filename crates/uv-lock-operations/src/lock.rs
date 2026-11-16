@@ -835,12 +835,11 @@ async fn do_lock(
         None
     };
 
-    // For `uv lock --locked`, if we find a version mismatch, we want to
-    // bail out and report that error immediately.
+    // Report incompatible or ambiguous locked selections without resolving again in locked mode.
     if let LockMode::Locked(_, source) = mode
-        && let Some(ValidatedLock::VersionMismatch(_, mismatch)) = existing_lock
+        && let Some(ValidatedLock::DependencyMismatch(_, mismatch)) = existing_lock
     {
-        return Err(LockError::LockVersionMismatch(
+        return Err(LockError::LockDependencyMismatch(
             target.lock_filename(),
             source,
             mismatch,
@@ -862,7 +861,7 @@ async fn do_lock(
             ValidatedLock::Unusable(_)
             | ValidatedLock::Versions(_)
             | ValidatedLock::Preferable(_)
-            | ValidatedLock::VersionMismatch(..),
+            | ValidatedLock::DependencyMismatch(..),
         )
         | None => {
             let recorder = if preview.is_enabled(PreviewFeature::ResolutionInputs) {
@@ -881,7 +880,7 @@ async fn do_lock(
             // Determine whether we can reuse the existing package versions.
             let versions_lock = existing_lock.as_ref().and_then(|lock| match &lock {
                 ValidatedLock::Satisfies(lock) => Some(lock),
-                ValidatedLock::Preferable(lock) | ValidatedLock::VersionMismatch(lock, _) => {
+                ValidatedLock::Preferable(lock) | ValidatedLock::DependencyMismatch(lock, _) => {
                     Some(lock)
                 }
                 ValidatedLock::Versions(lock) => Some(lock),
@@ -903,7 +902,7 @@ async fn do_lock(
             // Determine whether we can reuse the existing package forks.
             let forks_lock = existing_lock.as_ref().and_then(|lock| match &lock {
                 ValidatedLock::Satisfies(lock) => Some(lock),
-                ValidatedLock::Preferable(lock) | ValidatedLock::VersionMismatch(lock, _) => {
+                ValidatedLock::Preferable(lock) | ValidatedLock::DependencyMismatch(lock, _) => {
                     Some(lock)
                 }
                 ValidatedLock::Versions(_) => None,

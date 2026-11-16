@@ -53,13 +53,17 @@ impl From<FrozenSource> for MissingLockfileSource {
     }
 }
 
-/// A locked version that violates a declared specifier.
+/// A locked dependency selection that violates a specifier or overlaps another selection.
 #[derive(Debug, thiserror::Error)]
-#[error("Locked `{name}=={version}` does not satisfy `{specifier}`.")]
-pub struct LockVersionMismatch {
-    pub(crate) name: PackageName,
-    pub(crate) version: Version,
-    pub(crate) specifier: VersionSpecifiers,
+pub enum LockDependencyMismatch {
+    #[error("Locked `{name}=={version}` does not satisfy `{specifier}`.")]
+    Version {
+        name: PackageName,
+        version: Version,
+        specifier: VersionSpecifiers,
+    },
+    #[error("Locked packages `{first}` and `{second}` can be selected together.")]
+    Conflict { first: String, second: String },
 }
 
 /// A failure while reading, validating, or resolving a lockfile.
@@ -69,7 +73,7 @@ pub enum LockError {
     LockMismatch(Option<Box<Lock>>, Box<Lock>, LockedSource),
 
     #[error("The lockfile at `{0}` needs to be updated, but `{1}` was provided.")]
-    LockVersionMismatch(PathBuf, LockedSource, #[source] LockVersionMismatch),
+    LockDependencyMismatch(PathBuf, LockedSource, #[source] LockDependencyMismatch),
 
     #[error(
         "The lockfile at `{0}` has non-canonical formatting at line {1}, but `{2}` was provided."
@@ -197,7 +201,7 @@ impl From<LockError> for UvError {
     fn from(error: LockError) -> Self {
         match error {
             error @ (LockError::LockMismatch(..)
-            | LockError::LockVersionMismatch(..)
+            | LockError::LockDependencyMismatch(..)
             | LockError::LockFormat(..)
             | LockError::MissingLockfile(..)
             | LockError::LockWorkspaceMismatch(..)) => Self::user(error),
@@ -237,7 +241,7 @@ impl Hinted for LockError {
     fn hints(&self) -> Hints<'_> {
         match self {
             Self::LockMismatch(..)
-            | Self::LockVersionMismatch(..)
+            | Self::LockDependencyMismatch(..)
             | Self::LockWorkspaceMismatch(..) => {
                 Hints::from("To update the lockfile, run `uv lock`.")
             }
