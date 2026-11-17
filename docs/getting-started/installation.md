@@ -112,6 +112,27 @@ uv is available via [WinGet](https://winstall.app/apps/astral-sh.uv).
 $ winget install --id=astral-sh.uv  -e
 ```
 
+!!! note "Windows DevConfig source preview"
+
+    For an already provisioned Windows development machine, the
+    [Windows DevConfig source preview](https://github.com/crutkas/WindowsDeveloperConfig-oem/blob/crutkas-devconfig-fork-only-workloads/src/docs/windows-onboarding-preview.md)
+    includes an optional `uv` workload that installs the same `astral-sh.uv` WinGet package and checks
+    `uv --version`. From the root of a reviewed checkout of that personal-fork preview:
+
+    ```powershell
+    .\src\Workloads\install-source.ps1 -Workload uv
+    ```
+
+    This is an unsigned, review-only integration preview, not a Microsoft-signed release or an
+    endorsed installation method. Review its prerequisites and package terms before running it:
+    it accepts configuration/package agreements and may remediate WinGet Configuration and its
+    Visual C++ runtime dependency. It is not a full workstation setup.
+
+    The `uv` workload does not install Python or Python install manager; the preview's `python`
+    workload is separate and is not required for uv. uv can
+    [use existing Python installations or download Python as needed](../guides/install-python.md).
+    For installing uv alone, use the standalone installer or WinGet command above.
+
 ### Scoop
 
 uv is available via [Scoop](https://scoop.sh/#/apps?q=uv).
